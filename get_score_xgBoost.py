@@ -24,7 +24,7 @@ def get_score_xgboost(ticker):
 
 
 if __name__ == "__main__":
-    ticker = "KO"
+    ticker = "RCL"
     score = get_score_xgboost(ticker)
     print(f"Ticker: {ticker}, Score: {score}")
     # 这里可以根据 score 做进一步的决策，比如是否买入等

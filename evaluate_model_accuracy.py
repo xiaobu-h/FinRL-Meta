@@ -22,20 +22,18 @@ logging.basicConfig(
 )
 
 
-
-def evaluate_model_accuracy(ticker="AAPL", model_type="xgboost", start="2022-01-01", end=None, lookback_days=60):
+def evaluate_model_accuracy(ticker="AAPL", model_type="xgboost", start="2022-01-01", end=None, lookback_days=60, threshold=0.8):
     if end is None:
         end = datetime.datetime.today().strftime('%Y-%m-%d')
-        
-    # 下载数据
+
     df = yf.download(ticker, start=start, end=end)
     df['return'] = df['Close'].pct_change()
     df['target'] = (df['return'].shift(-1) > 0).astype(int)
     df.dropna(inplace=True)
-    
-    preds, trues = [], []
 
-    if model_type == "random_forest" or model_type == "xgboost":
+    scores, actuals = [], []
+
+    if model_type in ["random_forest", "xgboost"]:
         features = df[['Open', 'High', 'Low', 'Close', 'Volume']]
         labels = df['target']
         for i in range(lookback_days, len(df) - 1):
@@ -45,12 +43,12 @@ def evaluate_model_accuracy(ticker="AAPL", model_type="xgboost", start="2022-01-
             if model_type == "random_forest":
                 model = RandomForestClassifier()
             else:
-                model = XGBClassifier( eval_metric='logloss')
+                model = XGBClassifier(eval_metric='logloss', use_label_encoder=False, verbosity=0)
 
             model.fit(X_train, y_train)
-            pred = model.predict(X_test)[0]
-            preds.append(pred)
-            trues.append(y_test.values[0])
+            prob = model.predict_proba(X_test)[0][1]  # 看涨的概率
+            scores.append(prob)
+            actuals.append(y_test.values[0])
 
     elif model_type == "lstm":
         df = df[['Close', 'target']]
@@ -72,21 +70,35 @@ def evaluate_model_accuracy(ticker="AAPL", model_type="xgboost", start="2022-01-
             model.fit(X, y, epochs=5, batch_size=8, verbose=0)
 
             X_test = df['Close'].iloc[i-lookback:i].values.reshape((1, lookback, 1))
-            pred = model.predict(X_test)[0][0]
-            preds.append(int(pred > 0.5))
-            trues.append(df['target'].iloc[i])
+            prob = model.predict(X_test)[0][0]
+            scores.append(prob)
+            actuals.append(df['target'].iloc[i])
     else:
         raise ValueError("Invalid model_type. Use 'random_forest', 'xgboost', or 'lstm'.")
 
-    accuracy = accuracy_score(trues, preds)
-    print(f"[{model_type.upper()}] Accuracy on {ticker}: {round(accuracy * 100, 2)}% ({len(preds)} samples)")
+    # 只对分数大于threshold的信号进行评估
+    total_signals = 0
+    correct_signals = 0
+    for score, true in zip(scores, actuals):
+        if score > threshold:
+            total_signals += 1
+            if true == 1:
+                correct_signals += 1
+
+    if total_signals == 0:
+        print(f"[{model_type.upper()}] No signals with score > {threshold}")
+        return 0.0
+
+    accuracy = correct_signals / total_signals
+    print(f"[{model_type.upper()}] Precision on signals (score > {threshold}) for {ticker}: {round(accuracy * 100, 2)}% ({total_signals} signals)")
     return accuracy
 
 
+
 if __name__ == "__main__":
-    ticker = "NVDA"   
-    date = "2025-02-01"
-    days = 90
+    ticker = "MSFT"   
+    date = "2024-06-01"
+    days = 150
         
     logging.info(f"Evaluating models for ticker: {ticker} starting from {date} with lookback of {days} days")
     model_type3 = "random_forest"  # Change to "xgboost" or "lstm" as needed
@@ -95,12 +107,8 @@ if __name__ == "__main__":
     
     model_type = "xgboost"  # Change to "random_forest" or "lstm" as needed
     accuracy1 = evaluate_model_accuracy(ticker=ticker, model_type=model_type, start=date, end=None, lookback_days=days)
- 
-
     logging.info(f"Model Type: {model_type}, Ticker: {ticker}, Accuracy:        {round(accuracy1 * 100, 2)}%")
    
-    model_type2 = "lstm"  # Change to "random_forest" or "xgboost" as needed
-    accuracy2 = evaluate_model_accuracy(ticker=ticker, model_type=model_type2, start=date, end=None, lookback_days=days)
-    logging.info(f"Model Type: {model_type2}, Ticker: {ticker}, Accuracy: {round(accuracy2 * 100, 2)}%")
+    
 
 

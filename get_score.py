@@ -28,7 +28,7 @@ def get_score(ticker):
 
 
 if __name__ == "__main__":
-    ticker = "KO"
+    ticker = "HLT"
     score = get_score(ticker)
     print(f"Ticker: {ticker}, Score: {score}")
     # 这里可以根据 score 做进一步的决策，比如是否买入等
